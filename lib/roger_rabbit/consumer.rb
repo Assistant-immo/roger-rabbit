@@ -36,10 +36,8 @@ module RogerRabbit
             else
               self.get_dead_queue_for(@current_queue.name).publish(body)
             end
-
-            # Need to ack the message to dequeue it from the work queue (or else it will be duplicated in the retry queue and the work queue)
-            @channel.acknowledge(_delivery_info.delivery_tag, false)
           end
+          @channel.acknowledge(_delivery_info.delivery_tag, false)
         end
       rescue Interrupt => _
         self.close
