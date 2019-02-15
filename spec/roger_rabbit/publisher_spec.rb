@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-describe RogerRabbit::Consumer do
+describe RogerRabbit::Publisher do
   let(:queue_name) { 'queue_name' }
   let(:dead_queue_name) { 'dead_queue_name' }
   let(:retry_queue_name) { 'retry_queue_name' }
@@ -69,58 +69,77 @@ describe RogerRabbit::Consumer do
     expect(queue_double).to receive(:bind).with(exchange_double, {:routing_key=>queue_name})
     expect(retry_queue_double).to receive(:bind).with(retry_exchange_double, {:routing_key=>retry_queue_name})
     expect(dead_queue_double).to receive(:bind).with(dead_exchange_double, {:routing_key=>dead_queue_name})
-
-    expect(queue_double).to receive(:subscribe).with({:block=>true, :manual_ack=>true}).and_yield(delivery_info, delivery_properties, response_body)
   end
 
+  describe '#publish' do
+    let(:messages) { ['message1', 'message2'] }
 
-  describe '#consume' do
-    it 'should yield the block passed with the correct arguments' do
-      allow(retry_queue_double).to receive(:publish)
-      allow(channel_double).to receive(:acknowledge).with('delivery_tag', false)
+    context 'No block given' do
 
-      expect{ |probe| RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&probe) }.to yield_with_args(response_body)
-    end
+      context 'Success' do
+        let(:success) { true }
 
-    context 'passed block evaluate to true' do
-      let(:block) { -> (body) { true } }
+        it 'should call the right methods' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-      it 'should not try to publish in the retry or the dead queue and acknowledge the message' do
-        expect(retry_queue_double).not_to receive(:publish)
-        expect(dead_queue_double).not_to receive(:publish)
-
-        expect(channel_double).to receive(:acknowledge).with('delivery_tag', false)
-
-        RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&block)
-      end
-    end
-
-    context 'passed block evaluate to false' do
-      let(:block) { -> (body) { false } }
-
-      context 'Will retry' do
-        let(:delivery_headers) { {"x-retry-count" => 0} }
-
-        it 'should requeue the message in the retry queue' do
-          expect(retry_queue_double).to receive(:publish).with(response_body, {:expiration=>11000, :headers=>{:"x-retry-count"=>1}})
-
-          expect(channel_double).to receive(:acknowledge).with('delivery_tag', false)
-
-          RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&block)
+          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(channel_double).to receive(:wait_for_confirms).and_return(success)
+          expect(instance.publish(messages)).to be(success)
         end
       end
 
-      context 'retries exhausted' do
-        let(:delivery_headers) { {"x-retry-count" => 3} }
+      context 'Failure' do
+        let(:success) { false }
 
-        it 'should send the message to the dead queue' do
-          expect(dead_queue_double).to receive(:publish).with(response_body)
+        it 'should call the right methods' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-          expect(channel_double).to receive(:acknowledge).with('delivery_tag', false)
-
-          RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&block)
+          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(channel_double).to receive(:wait_for_confirms).and_return(success)
+          expect(instance.publish(messages)).to be(success)
         end
       end
+    end
+
+    context 'Block given' do
+
+      context 'Success' do
+        let(:success) { true }
+
+        it 'should call the right methods and call the block' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(channel_double).to receive(:wait_for_confirms).and_return(success)
+          expect{ |probe| instance.publish(messages, &probe) }.to yield_with_no_args
+        end
+      end
+
+      context 'Failure' do
+        let(:success) { false }
+
+        it 'should call the right methods and not call the block' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(channel_double).to receive(:wait_for_confirms).and_return(success)
+          expect{ |probe| instance.publish(messages, &probe) }.not_to yield_control
+        end
+      end
+    end
+  end
+
+  describe '#publish_to_queue' do
+    let(:messages) { [1,2,3] }
+
+    it 'should call the right methods' do
+      instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+      expect(exchange_double).to receive(:publish).with(1, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key]})
+      expect(exchange_double).to receive(:publish).with(2, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key]})
+      expect(exchange_double).to receive(:publish).with(3, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key]})
+
+      instance.send(:publish_to_queue, messages)
     end
   end
 end
