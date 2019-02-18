@@ -4,3 +4,7 @@ gem 'bunny', '~> 2.13.0', '>= 2.13.0'
 group :development, :test do
   gem 'rspec', '~> 3.7'
 end
+
+group :test do
+  gem 'simplecov', require: false
+end

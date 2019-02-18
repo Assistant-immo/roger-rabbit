@@ -1,6 +1,6 @@
 require "roger_rabbit/configuration"
 require "roger_rabbit/version"
-require "roger_rabbit/base_interface"
+require "roger_rabbit/base"
 require "roger_rabbit/consumer"
 require "roger_rabbit/publisher"
 
@@ -10,11 +10,13 @@ module RogerRabbit
   end
 
   def self.configuration
-    @configuration ||= Configuration.new
+    @configuration
   end
 
   def self.configure
+    @configuration ||= RogerRabbit::Configuration.new
     yield(configuration)
+    configuration.validate
   end
 
   def version

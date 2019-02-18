@@ -51,6 +51,7 @@ describe RogerRabbit::Consumer do
       config.queues = queues
       config.retry_exchange_name = retry_exchange_name
       config.dead_exchange_name = dead_exchange_name
+      config.publisher_confirms = true
     end
 
     expect(Bunny).to receive(:new).with(rabbit_mq_url).and_return(connection_double)

@@ -1,25 +1,45 @@
 require 'spec_helper'
 
-describe RogerRabbit::BaseInterface do
+describe RogerRabbit::Base do
 
   describe 'instance' do
     subject {
-      RogerRabbit::BaseInterface.instance
+      RogerRabbit::Base.instance
     }
 
-    it 'should return a properly configured instance' do
-      expect_any_instance_of(RogerRabbit::BaseInterface).to receive(:init_connection_and_channel)
-
-      instance = subject
-
-      expect(instance).to have_attributes(class: RogerRabbit::BaseInterface, exchanges: {}, queues: {})
+    before do
+      RogerRabbit.configure do |config|
+        config.rabbit_mq_url = 'url'
+        config.exchanges = {}
+        config.queues = {}
+        config.retry_exchange_name = 'retry_exchange_name'
+        config.dead_exchange_name = 'dead_exchange_name'
+      end
     end
 
-    it 'should be a singleton' do
-      instance = subject
-      instance2 = subject
+    it 'should return a properly configured instance' do
+      expect_any_instance_of(RogerRabbit::Base).to receive(:init_connection_and_channel)
 
-      expect(instance).to equal(instance2)
+      instance = subject
+
+      expect(instance).to have_attributes(class: RogerRabbit::Base, exchanges: {}, queues: {})
+    end
+
+    it 'should be a singleton for each child class' do
+      expect_any_instance_of(RogerRabbit::Publisher).to receive(:init_connection_and_channel)
+
+      publisher_instance = RogerRabbit::Publisher.instance
+      publisher_instance2 = RogerRabbit::Publisher.instance
+
+      expect_any_instance_of(RogerRabbit::Consumer).to receive(:init_connection_and_channel)
+
+      consumer_instance = RogerRabbit::Consumer.instance
+      consumer_instance2 = RogerRabbit::Consumer.instance
+
+      expect(publisher_instance).to equal(publisher_instance2)
+      expect(consumer_instance).to equal(consumer_instance2)
+
+      expect(publisher_instance).not_to equal(consumer_instance)
     end
   end
 
@@ -27,7 +47,7 @@ describe RogerRabbit::BaseInterface do
     let(:queue_name) { 'queue_test' }
 
     subject {
-      RogerRabbit::BaseInterface.get_instance_for_queue(queue_name)
+      RogerRabbit::Base.get_instance_for_queue(queue_name)
     }
 
     context 'The connection is either new or currently opened' do
@@ -37,15 +57,14 @@ describe RogerRabbit::BaseInterface do
       let(:instance) { double('Instance') }
 
       it 'should call the right methods' do
-        expect(RogerRabbit::BaseInterface).to receive(:get_exchange_for_queue).with(queue_name).and_return(exchange_name)
-        expect(RogerRabbit::BaseInterface).to receive(:get_exchange_config).with(exchange_name).and_return(exchange_config)
-        expect(RogerRabbit::BaseInterface).to receive(:get_queue_config).with(queue_name).and_return(queue_config)
-        expect(RogerRabbit::BaseInterface).to receive(:instance).and_return(instance)
+        expect(RogerRabbit::Base).to receive(:get_exchange_for_queue).with(queue_name).and_return(exchange_name)
+        expect(RogerRabbit::Base).to receive(:get_exchange_config).with(exchange_name).and_return(exchange_config)
+        expect(RogerRabbit::Base).to receive(:get_queue_config).with(queue_name).and_return(queue_config)
+        expect(RogerRabbit::Base).to receive(:instance).and_return(instance)
 
         expect(instance).to receive(:connection_closed)
 
-        expect(instance).to receive(:set_retriable_exchanges)
-        expect(instance).to receive(:set_exchange).with(exchange_config.dup.merge(name: exchange_name))
+        expect(instance).to receive(:set_working_exchange).with(exchange_config.dup.merge(name: exchange_name))
         expect(instance).to receive(:set_queue).with(queue_config.dup.merge(name: queue_name))
 
         expect(subject).to eq(instance)
@@ -54,7 +73,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#close' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:connection) { double('Connection') }
     subject {
       instance.close
@@ -79,7 +98,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#initialize' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
 
     subject {
       instance.send(:initialize)
@@ -97,18 +116,31 @@ describe RogerRabbit::BaseInterface do
 
   describe 'new' do
     subject {
-      RogerRabbit::BaseInterface.new
+      RogerRabbit::Base.new
     }
 
     it 'should be a private method' do
       expect {
         subject
-      }.to raise_error(NoMethodError).with_message("private method `new' called for RogerRabbit::BaseInterface:Class")
+      }.to raise_error(NoMethodError).with_message("private method `new' called for RogerRabbit::Base:Class")
+    end
+
+    context 'No configuration provided' do
+
+      before do
+        expect(RogerRabbit).to receive(:configuration).and_return(nil)
+      end
+
+      it 'should raise an appropriate error' do
+        expect{
+          RogerRabbit::Base.send(:new)
+        }.to raise_error(RogerRabbit::Configuration::ConfigurationError).with_message('No configuration was provided, please use RogerRabbit.configure do |config|; end to do so')
+      end
     end
   end
 
   describe '#init_connection_and_channel' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
 
     subject {
       instance.send(:init_connection_and_channel)
@@ -127,7 +159,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#open_rabbit_mq_connection' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:url) { 'url' }
     let(:connection_double) { double('Connection') }
 
@@ -146,7 +178,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#create_channel' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:connection_double) { double('Connection') }
     let(:channel_double) { double('Channel') }
 
@@ -158,16 +190,40 @@ describe RogerRabbit::BaseInterface do
       instance.instance_variable_set(:@connection, connection_double)
     end
 
-    it 'should call the correct methods' do
-      expect(connection_double).to receive(:create_channel).and_return(channel_double)
-      expect(channel_double).to receive(:confirm_select)
+    context 'Publisher confirms configured' do
+      before do
+        RogerRabbit.configure do |config|
+          config.publisher_confirms = true
+        end
+      end
 
-      subject
+      it 'should call the correct methods' do
+        expect(connection_double).to receive(:create_channel).and_return(channel_double)
+        expect(channel_double).to receive(:confirm_select)
+
+        subject
+      end
     end
+
+    context 'Publisher confirms not configured' do
+      before do
+        RogerRabbit.configure do |config|
+          config.publisher_confirms = false
+        end
+      end
+
+      it 'should call the correct methods' do
+        expect(connection_double).to receive(:create_channel).and_return(channel_double)
+        expect(channel_double).not_to receive(:confirm_select)
+
+        subject
+      end
+    end
+
   end
 
   describe '#set_retriable_exchanges' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
 
     subject {
       instance.send(:set_retriable_exchanges)
@@ -182,7 +238,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#set_retry_exchange' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:retry_exchange_name) { 'retry_exchange_name' }
     let(:channel_double) { double('Channel') }
 
@@ -195,17 +251,29 @@ describe RogerRabbit::BaseInterface do
     end
 
     it 'should call the correct methods' do
-      expect(RogerRabbit.configuration).to receive(:retry_exchange_name).exactly(:twice).and_return(retry_exchange_name)
+      expect(RogerRabbit.configuration).to receive(:retry_exchange_name).and_return(retry_exchange_name)
       expect(channel_double).to receive(:direct).with(retry_exchange_name, {durable: true}).and_return('retry_exchange_instance')
 
       subject
 
       expect(instance.exchanges).to eq({retry_exchange_name =>"retry_exchange_instance"})
     end
+
+    context 'no retry_exchange_name has been specified' do
+      before do
+        expect(RogerRabbit.configuration).to receive(:retry_exchange_name).and_return(nil)
+      end
+
+      it 'should raise the appropriate error' do
+        expect {
+          subject
+        }.to raise_error(RogerRabbit::Configuration::ConfigurationError).with_message('Please specify the retry_exchange_name property when configuring RogerRabbit')
+      end
+    end
   end
 
   describe '#get_retry_queue_name' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:queue_name) { 'queue_name' }
     subject {
       instance.send(:get_retry_queue_name, queue_name)
@@ -217,7 +285,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe 'set_retry_queue' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:queue_name) { 'queue_name' }
     let(:channel_double) { double('Channel') }
     let(:queue_double) { double('Queue') }
@@ -233,6 +301,7 @@ describe RogerRabbit::BaseInterface do
 
     context 'Retry queue not set' do
       it 'should set the retry queue' do
+        expect(instance).to receive(:set_retry_exchange)
         expect(RogerRabbit.configuration).to receive(:retry_exchange_name).and_return('retry_exchange_name')
 
         expect(instance).to receive(:get_retry_queue_name).with(queue_name).and_return('retry_queue_name')
@@ -274,7 +343,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#get_retry_queue_for' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:queue_name) { 'queue_name' }
 
     subject {
@@ -293,7 +362,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#set_dead_exchange' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:dead_exchange_name) { 'dead_exchange_name' }
     let(:channel_double) { double('Channel') }
 
@@ -307,17 +376,29 @@ describe RogerRabbit::BaseInterface do
     end
 
     it 'should call the correct methods' do
-      expect(RogerRabbit.configuration).to receive(:dead_exchange_name).exactly(:twice).and_return(dead_exchange_name)
+      expect(RogerRabbit.configuration).to receive(:dead_exchange_name).and_return(dead_exchange_name)
       expect(channel_double).to receive(:direct).with(dead_exchange_name, {durable: true}).and_return('dead_exchange_instance')
 
       subject
 
       expect(instance.exchanges).to eq({dead_exchange_name =>"dead_exchange_instance"})
     end
+
+    context 'no dead_exchange_name has been specified' do
+      before do
+        expect(RogerRabbit.configuration).to receive(:dead_exchange_name).and_return(nil)
+      end
+
+      it 'should raise the appropriate error' do
+        expect {
+          subject
+        }.to raise_error(RogerRabbit::Configuration::ConfigurationError).with_message('Please specify the dead_exchange_name property when configuring RogerRabbit')
+      end
+    end
   end
 
   describe '#get_dead_queue_name' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:queue_name) { 'queue_name' }
     subject {
       instance.send(:get_dead_queue_name, queue_name)
@@ -329,7 +410,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe 'set_dead_queue' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:queue_name) { 'queue_name' }
     let(:channel_double) { double('Channel') }
     let(:queue_double) { double('Queue') }
@@ -345,6 +426,8 @@ describe RogerRabbit::BaseInterface do
 
     context 'Retry queue not set' do
       it 'should set the retry queue' do
+        expect(instance).to receive(:set_dead_exchange)
+
         expect(RogerRabbit.configuration).to receive(:dead_exchange_name).and_return('dead_exchange_name')
 
         expect(instance).to receive(:get_dead_queue_name).with(queue_name).and_return('dead_queue_name')
@@ -379,7 +462,7 @@ describe RogerRabbit::BaseInterface do
   end
 
   describe '#get_dead_queue_for' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:queue_name) { 'queue_name' }
 
     subject {
@@ -397,11 +480,48 @@ describe RogerRabbit::BaseInterface do
     end
   end
 
-  describe '#set_exchange' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
-    let(:params) {
+  describe '#set_working_exchange' do
+    let(:instance) { RogerRabbit::Base.instance }
+
+    let(:exchange_params) {
       {
         name: 'exchange_name',
+        param1: 1,
+        param2: 2
+      }
+    }
+
+    let(:channel_double) { double('Channel') }
+
+    subject {
+      instance.send(:set_working_exchange, exchange_params)
+    }
+
+    before do
+      instance.instance_variable_set(:@channel, channel_double)
+      instance.instance_variable_set(:@exchanges, {})
+    end
+
+    it 'should set the correct current exchange property' do
+      expect(channel_double).to receive(:direct).with('exchange_name', {param1: 1, param2: 2}).and_return('exchange_instance')
+
+      subject
+
+      expect(instance.exchanges).to eq({'exchange_name' => 'exchange_instance'})
+      expect(instance.instance_variable_get(:@current_exchange)).to eq('exchange_instance')
+    end
+  end
+
+  describe '#set_exchange' do
+    let(:instance) { RogerRabbit::Base.instance }
+    let(:exchange_name) {
+      'exchange_name'
+    }
+    let(:exchange_type) {
+      :direct
+    }
+    let(:exchange_params) {
+      {
         param1: 1,
         param2: 2
       }
@@ -409,7 +529,7 @@ describe RogerRabbit::BaseInterface do
     let(:channel_double) { double('Channel') }
 
     subject {
-      instance.send(:set_exchange, params)
+      instance.send(:set_exchange, exchange_type, exchange_name, exchange_params)
     }
 
     before do
@@ -419,12 +539,11 @@ describe RogerRabbit::BaseInterface do
 
     context 'Exchange not already set' do
       it 'should update exchanges variable and the current_exchange variable' do
-        expect(channel_double).to receive(:direct).with('exchange_name', {param1: 1, param2: 2}).and_return('exchange_instance')
+        expect(channel_double).to receive(exchange_type).with(exchange_name, exchange_params).and_return('exchange_instance')
 
         subject
 
         expect(instance.exchanges).to eq({'exchange_name' => 'exchange_instance'})
-        expect(instance.current_exchange).to eq('exchange_instance')
       end
     end
 
@@ -434,18 +553,17 @@ describe RogerRabbit::BaseInterface do
       end
 
       it 'should not create a new exchange and use the existing one' do
-        expect(channel_double).not_to receive(:direct)
+        expect(channel_double).not_to receive(exchange_type)
 
         subject
 
         expect(instance.exchanges).to eq({'exchange_name' => 'exchange_instance'})
-        expect(instance.current_exchange).to eq('exchange_instance')
       end
     end
   end
 
   describe '#set_queue' do
-    let(:instance) { RogerRabbit::BaseInterface.instance }
+    let(:instance) { RogerRabbit::Base.instance }
     let(:params) {
       {
         name: 'queue_name',
@@ -525,25 +643,25 @@ describe RogerRabbit::BaseInterface do
     let(:queue_name) { 'queue_name' }
 
     subject {
-      RogerRabbit::BaseInterface.send(:get_exchange_for_queue, queue_name)
+      RogerRabbit::Base.send(:get_exchange_for_queue, queue_name)
     }
 
     context 'No exchange linked to the queue' do
 
       before do
-        expect(RogerRabbit::BaseInterface).to receive(:get_queue_config).with(queue_name).and_return({})
+        expect(RogerRabbit::Base).to receive(:get_queue_config).with(queue_name).and_return({})
       end
 
       it 'should raise an error' do
         expect {
           subject
-        }.to raise_error(RogerRabbit::BaseInterface::ConfigurationError).with_message('No mapped exchange to queue <queue_name>')
+        }.to raise_error(RogerRabbit::Configuration::ConfigurationError).with_message('No mapped exchange to queue <queue_name>')
       end
     end
 
     context 'An exchange is linked to the queue' do
       before do
-        expect(RogerRabbit::BaseInterface).to receive(:get_queue_config).with(queue_name).and_return({exchange: 'exchange_name'})
+        expect(RogerRabbit::Base).to receive(:get_queue_config).with(queue_name).and_return({exchange: 'exchange_name'})
       end
 
       it 'should return the exchange name' do
@@ -556,7 +674,7 @@ describe RogerRabbit::BaseInterface do
     let(:exchange_name) { 'exchange_name' }
 
     subject {
-      RogerRabbit::BaseInterface.send(:get_exchange_config, exchange_name)
+      RogerRabbit::Base.send(:get_exchange_config, exchange_name)
     }
 
     context 'No exchange config' do
@@ -568,7 +686,7 @@ describe RogerRabbit::BaseInterface do
       it 'should raise an error' do
         expect {
           subject
-        }.to raise_error(RogerRabbit::BaseInterface::ConfigurationError).with_message('No configuration for exchange <exchange_name>')
+        }.to raise_error(RogerRabbit::Configuration::ConfigurationError).with_message('No configuration for exchange <exchange_name>')
       end
     end
 
@@ -587,7 +705,7 @@ describe RogerRabbit::BaseInterface do
     let(:queue_name) { 'queue_name' }
 
     subject {
-      RogerRabbit::BaseInterface.send(:get_queue_config, queue_name)
+      RogerRabbit::Base.send(:get_queue_config, queue_name)
     }
 
     context 'No queue config' do
@@ -599,7 +717,7 @@ describe RogerRabbit::BaseInterface do
       it 'should raise an error' do
         expect {
           subject
-        }.to raise_error(RogerRabbit::BaseInterface::ConfigurationError).with_message('No configuration for queue <queue_name>')
+        }.to raise_error(RogerRabbit::Configuration::ConfigurationError).with_message('No configuration for queue <queue_name>')
       end
     end
 

@@ -43,6 +43,8 @@ describe RogerRabbit::Publisher do
 
   let(:delivery_headers) { {} }
 
+  let(:publisher_confirms) { true }
+
   before do
     RogerRabbit::Consumer.clear_instance
     RogerRabbit.configure do |config|
@@ -51,6 +53,7 @@ describe RogerRabbit::Publisher do
       config.queues = queues
       config.retry_exchange_name = retry_exchange_name
       config.dead_exchange_name = dead_exchange_name
+      config.publisher_confirms = publisher_confirms
     end
 
     expect(Bunny).to receive(:new).with(rabbit_mq_url).and_return(connection_double)
@@ -58,7 +61,12 @@ describe RogerRabbit::Publisher do
     expect(connection_double).to receive(:start)
     expect(connection_double).to receive(:create_channel).and_return(channel_double)
 
-    expect(channel_double).to receive(:confirm_select)
+    if publisher_confirms
+      expect(channel_double).to receive(:confirm_select)
+    else
+      expect(channel_double).not_to receive(:confirm_select)
+    end
+
     expect(channel_double).to receive(:direct).with(retry_exchange_name, {:durable=>true}).and_return(retry_exchange_double)
     expect(channel_double).to receive(:direct).with(dead_exchange_name, {:durable=>true}).and_return(dead_exchange_double)
     expect(channel_double).to receive(:direct).with(exchange_name, {:durable=>true}).and_return(exchange_double)
@@ -125,6 +133,19 @@ describe RogerRabbit::Publisher do
           expect(channel_double).to receive(:wait_for_confirms).and_return(success)
           expect{ |probe| instance.publish(messages, &probe) }.not_to yield_control
         end
+      end
+    end
+
+    context 'channel is not in publisher confirms mode' do
+      let(:publisher_confirms) { false }
+
+      it 'should call the right methods' do
+        instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+        expect(instance).to receive(:publish_to_queue).with(messages)
+        expect(channel_double).not_to receive(:wait_for_confirms)
+
+        expect(instance.publish(messages)).to eq(true)
       end
     end
   end

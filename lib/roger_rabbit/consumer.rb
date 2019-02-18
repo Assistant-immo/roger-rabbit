@@ -5,7 +5,7 @@
 # end
 
 module RogerRabbit
-  class Consumer < BaseInterface
+  class Consumer < Base
 
     def consume(&block)
       begin
@@ -27,6 +27,10 @@ module RogerRabbit
             retriable = queue_config.fetch(:retriable, false)
             exponential_backoff_factor = queue_config.fetch(:exponential_backoff_factor, 1.1)
 
+            puts '*' * 50
+            puts retry_count.inspect
+            puts max_retry_count.inspect
+            puts '*' * 50
             if retriable && retry_count < max_retry_count
               # Set the new expiration with an increasing factor
               new_expiration = expiration * exponential_backoff_factor
