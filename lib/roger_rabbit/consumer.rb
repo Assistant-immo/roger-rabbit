@@ -12,7 +12,7 @@ module RogerRabbit
         queue_config = self.class.get_queue_config(@current_queue.name)
 
         @current_queue.subscribe(block: true, manual_ack: true) do |_delivery_info, _properties, body|
-          success = block.call(body)
+          success = block.call(body, _properties)
 
           unless success
             # Taken from https://felipeelias.github.io/rabbitmq/2016/02/22/rabbitmq-exponential-backoff.html
@@ -27,10 +27,6 @@ module RogerRabbit
             retriable = queue_config.fetch(:retriable, false)
             exponential_backoff_factor = queue_config.fetch(:exponential_backoff_factor, 1.1)
 
-            puts '*' * 50
-            puts retry_count.inspect
-            puts max_retry_count.inspect
-            puts '*' * 50
             if retriable && retry_count < max_retry_count
               # Set the new expiration with an increasing factor
               new_expiration = expiration * exponential_backoff_factor

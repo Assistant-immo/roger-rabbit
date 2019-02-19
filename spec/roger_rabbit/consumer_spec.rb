@@ -80,11 +80,11 @@ describe RogerRabbit::Consumer do
       allow(retry_queue_double).to receive(:publish)
       allow(channel_double).to receive(:acknowledge).with('delivery_tag', false)
 
-      expect{ |probe| RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&probe) }.to yield_with_args(response_body)
+      expect{ |probe| RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&probe) }.to yield_with_args(response_body, delivery_properties)
     end
 
     context 'passed block evaluate to true' do
-      let(:block) { -> (body) { true } }
+      let(:block) { -> (body, properties) { true } }
 
       it 'should not try to publish in the retry or the dead queue and acknowledge the message' do
         expect(retry_queue_double).not_to receive(:publish)
@@ -97,7 +97,7 @@ describe RogerRabbit::Consumer do
     end
 
     context 'passed block evaluate to false' do
-      let(:block) { -> (body) { false } }
+      let(:block) { -> (body, properties) { false } }
 
       context 'Will retry' do
         let(:delivery_headers) { {"x-retry-count" => 0} }
