@@ -33,10 +33,17 @@ module RogerRabbit
 
               # Publish to retry queue with new expiration
               self.get_retry_queue_for(@current_queue.name).publish(body, expiration: new_expiration.to_i, headers: {
-                "x-retry-count": retry_count + 1
+                "x-retry-count": retry_count + 1,
+                correlation_id: extract_correlation_id(_properties)
               })
             else
-              self.get_dead_queue_for(@current_queue.name).publish(body)
+              headers = {}
+
+              if correlation_id = extract_correlation_id(_properties)
+                headers.merge!(correlation_id: correlation_id)
+              end
+
+              self.get_dead_queue_for(@current_queue.name).publish(body, headers)
             end
           end
           @channel.acknowledge(_delivery_info.delivery_tag, false)
@@ -47,5 +54,12 @@ module RogerRabbit
         exit(0)
       end
     end
+
+    private
+
+      def extract_correlation_id(properties)
+        # If retry attempt, correlation id is in the headers hash
+        properties[:correlation_id] || properties.headers.fetch('correlation_id', nil)
+      end
   end
 end
