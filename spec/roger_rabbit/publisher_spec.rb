@@ -90,7 +90,7 @@ describe RogerRabbit::Publisher do
         it 'should call the right methods' do
           instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(instance).to receive(:publish_to_queue).with(messages, {})
           expect(channel_double).to receive(:wait_for_confirms).and_return(success)
           expect(instance.publish(messages)).to be(success)
         end
@@ -102,7 +102,7 @@ describe RogerRabbit::Publisher do
         it 'should call the right methods' do
           instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(instance).to receive(:publish_to_queue).with(messages, {})
           expect(channel_double).to receive(:wait_for_confirms).and_return(success)
           expect(instance.publish(messages)).to be(success)
         end
@@ -117,7 +117,7 @@ describe RogerRabbit::Publisher do
         it 'should call the right methods and call the block' do
           instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(instance).to receive(:publish_to_queue).with(messages, {})
           expect(channel_double).to receive(:wait_for_confirms).and_return(success)
           expect{ |probe| instance.publish(messages, &probe) }.to yield_with_no_args
         end
@@ -129,7 +129,7 @@ describe RogerRabbit::Publisher do
         it 'should call the right methods and not call the block' do
           instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-          expect(instance).to receive(:publish_to_queue).with(messages)
+          expect(instance).to receive(:publish_to_queue).with(messages, {})
           expect(channel_double).to receive(:wait_for_confirms).and_return(success)
           expect{ |probe| instance.publish(messages, &probe) }.not_to yield_control
         end
@@ -142,7 +142,7 @@ describe RogerRabbit::Publisher do
       it 'should call the right methods' do
         instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
 
-        expect(instance).to receive(:publish_to_queue).with(messages)
+        expect(instance).to receive(:publish_to_queue).with(messages, {})
         expect(channel_double).not_to receive(:wait_for_confirms)
 
         expect(instance.publish(messages)).to eq(true)
@@ -160,7 +160,75 @@ describe RogerRabbit::Publisher do
       expect(exchange_double).to receive(:publish).with(2, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key]})
       expect(exchange_double).to receive(:publish).with(3, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key]})
 
-      instance.send(:publish_to_queue, messages)
+      instance.send(:publish_to_queue, messages, {})
+    end
+
+    context 'some publishing params are passed' do
+      let(:publishing_params) { {extra_param: 1} }
+
+      it 'should merge the publishing params with the standard params' do
+        instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+        expect(exchange_double).to receive(:publish).with(1, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key], :extra_param=>1})
+        expect(exchange_double).to receive(:publish).with(2, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key], :extra_param=>1})
+        expect(exchange_double).to receive(:publish).with(3, {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key], :extra_param=>1})
+
+        instance.send(:publish_to_queue, messages, publishing_params)
+      end
+    end
+
+    context 'messages are hashes' do
+
+      context 'payload and publishing_params present' do
+        let(:messages) { [{payload: 'payload', publishing_params: {param1: 1, param2: 2}}] }
+
+        it 'should merge the publishing params with the standard params and use the correct payload' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+          expect(exchange_double).to receive(:publish).with('payload', {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key], :param1=>1, :param2=>2})
+
+          instance.send(:publish_to_queue, messages, {})
+        end
+      end
+
+      context 'No payload on the message' do
+        let(:messages) { [{publishing_params: {param1: 1, param2: 2}}] }
+
+        it 'should raise an error' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+          expect {
+            instance.send(:publish_to_queue, messages, {})
+          }.to raise_error(RogerRabbit::Publisher::PayloadMissingError).with_message("{:publishing_params=>{:param1=>1, :param2=>2}} must have a ':payload' key defining its payload")
+        end
+      end
+    end
+
+    context 'messages are objects responding to the payload method' do
+
+      context 'payload and publishing_params available' do
+        let(:messages) { [OpenStruct.new(payload: 'payload', publishing_params: {param1: 1})] }
+
+        it 'should merge the publishing params with the standard params and use the correct payload' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+          expect(exchange_double).to receive(:publish).with('payload', {:content_type=>"application/json", :persistent=>true, :routing_key=>queues[queue_name][:routing_key], :param1=>1})
+
+          instance.send(:publish_to_queue, messages, {})
+        end
+      end
+
+      context 'no payload returned' do
+        let(:messages) { [OpenStruct.new(payload: nil, publishing_params: {param1: 1})] }
+
+        it 'should raise an error' do
+          instance = RogerRabbit::Publisher.get_instance_for_queue(queue_name)
+
+          expect {
+            instance.send(:publish_to_queue, messages, {})
+          }.to raise_error(RogerRabbit::Publisher::PayloadMissingError).with_message("The 'payload' method of #<OpenStruct payload=nil, publishing_params={:param1=>1}> must return a non-nil payload")
+        end
+      end
     end
   end
 end
