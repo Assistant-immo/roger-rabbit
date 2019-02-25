@@ -95,6 +95,7 @@ module RogerRabbit
 
       def create_channel
         @channel = @connection.create_channel
+        @channel.prefetch(RogerRabbit.configuration.consumer_prefetch_count)
         @channel.confirm_select if RogerRabbit.configuration.publisher_confirms
       end
 
@@ -169,8 +170,9 @@ module RogerRabbit
 
       def set_working_exchange(exchange_params)
         exchange_name = exchange_params.delete(:name)
+        exchange_type = exchange_params.delete(:type) || :direct
 
-        set_exchange(:direct, exchange_name, exchange_params)
+        set_exchange(exchange_type, exchange_name, exchange_params)
         @current_exchange = @exchanges[exchange_name]
       end
 

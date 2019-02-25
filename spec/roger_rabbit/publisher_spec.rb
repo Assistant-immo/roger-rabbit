@@ -54,6 +54,7 @@ describe RogerRabbit::Publisher do
       config.retry_exchange_name = retry_exchange_name
       config.dead_exchange_name = dead_exchange_name
       config.publisher_confirms = publisher_confirms
+      config.consumer_prefetch_count = 10
     end
 
     expect(Bunny).to receive(:new).with(rabbit_mq_url).and_return(connection_double)
@@ -67,6 +68,7 @@ describe RogerRabbit::Publisher do
       expect(channel_double).not_to receive(:confirm_select)
     end
 
+    expect(channel_double).to receive(:prefetch).with(10)
     expect(channel_double).to receive(:direct).with(retry_exchange_name, {:durable=>true}).and_return(retry_exchange_double)
     expect(channel_double).to receive(:direct).with(dead_exchange_name, {:durable=>true}).and_return(dead_exchange_double)
     expect(channel_double).to receive(:direct).with(exchange_name, {:durable=>true}).and_return(exchange_double)
