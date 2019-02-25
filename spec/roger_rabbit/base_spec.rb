@@ -199,6 +199,7 @@ describe RogerRabbit::Base do
 
       it 'should call the correct methods' do
         expect(connection_double).to receive(:create_channel).and_return(channel_double)
+        expect(channel_double).to receive(:prefetch).with(0)
         expect(channel_double).to receive(:confirm_select)
 
         subject
@@ -209,11 +210,13 @@ describe RogerRabbit::Base do
       before do
         RogerRabbit.configure do |config|
           config.publisher_confirms = false
+          config.consumer_prefetch_count = 10
         end
       end
 
       it 'should call the correct methods' do
         expect(connection_double).to receive(:create_channel).and_return(channel_double)
+        expect(channel_double).to receive(:prefetch).with(10)
         expect(channel_double).not_to receive(:confirm_select)
 
         subject

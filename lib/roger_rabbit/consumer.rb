@@ -6,17 +6,18 @@
 
 module RogerRabbit
   class Consumer < Base
+    DEFAULT_SUBSCRIPTION_OPTIONS = {block: true, manual_ack: true}
 
-    def consume(&block)
+    def consume(subscription_options = {}, &block)
       begin
         queue_config = self.class.get_queue_config(@current_queue.name)
 
-        @current_queue.subscribe(block: true, manual_ack: true) do |_delivery_info, _properties, body|
+        @current_queue.subscribe(DEFAULT_SUBSCRIPTION_OPTIONS.merge(subscription_options)) do |_delivery_info, _properties, body|
           max_retry_count = queue_config.fetch(:max_retry_count, 0)
           headers      = _properties.headers || {}
           retry_count  = headers.fetch("x-retry-count", 0)
-          correlation_id = extract_correlation_id(_properties)
-          reply_to = extract_reply_to(_properties)
+          correlation_id = extract_correlation_id(_properties, headers)
+          reply_to = extract_reply_to(_properties, headers)
 
 
           success = block.call(body, _properties, {correlation_id: correlation_id, reply_to: reply_to}, retry_count == max_retry_count)
@@ -62,14 +63,14 @@ module RogerRabbit
 
     private
 
-      def extract_correlation_id(properties)
+      def extract_correlation_id(properties, properties_headers)
         # If retry attempt, correlation id is in the headers hash
-        properties[:correlation_id] || properties.headers.fetch('correlation_id', nil)
+        properties[:correlation_id] || properties_headers.fetch('correlation_id', nil)
       end
 
-      def extract_reply_to(properties)
+      def extract_reply_to(properties, properties_headers)
         # If retry attempt, correlation id is in the headers hash
-        properties[:reply_to] || properties.headers.fetch('reply_to', nil)
+        properties[:reply_to] || properties_headers.fetch('reply_to', nil)
       end
   end
 end

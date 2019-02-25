@@ -1,6 +1,6 @@
 module RogerRabbit
   class Configuration
-    attr_accessor :rabbit_mq_url, :exchanges, :queues, :retry_exchange_name, :dead_exchange_name, :publisher_confirms
+    attr_accessor :rabbit_mq_url, :exchanges, :queues, :retry_exchange_name, :dead_exchange_name, :publisher_confirms, :consumer_prefetch_count
 
     ConfigurationError = Class.new(StandardError)
 
@@ -16,6 +16,8 @@ module RogerRabbit
 
       @retry_exchange_name = nil
       @dead_exchange_name = nil
+
+      @consumer_prefetch_count = 0
     end
 
     def validate
