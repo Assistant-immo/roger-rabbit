@@ -83,8 +83,8 @@ describe RogerRabbit::Consumer do
 
     it 'should yield the block passed with the correct arguments' do
       allow(retry_queue_double).to receive(:publish)
-      allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties)
-      allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties)
+      allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties, {})
+      allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties, {})
       allow(channel_double).to receive(:acknowledge).with('delivery_tag', false)
 
       expect{ |probe| RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&probe) }.to yield_with_args(response_body, delivery_properties, {:correlation_id=>nil, :reply_to=>nil}, false)
@@ -94,8 +94,8 @@ describe RogerRabbit::Consumer do
       let(:block) { -> (body, properties, rpc_properties, last_retry) { true } }
 
       it 'should not try to publish in the retry or the dead queue and acknowledge the message' do
-        allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties)
-        allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties)
+        allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties, {})
+        allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties, {})
 
         expect(retry_queue_double).not_to receive(:publish)
         expect(dead_queue_double).not_to receive(:publish)
@@ -113,8 +113,8 @@ describe RogerRabbit::Consumer do
         let(:delivery_headers) { {"x-retry-count" => 0} }
 
         it 'should requeue the message in the retry queue' do
-          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties).and_return('correlation_id')
-          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties).and_return('reply_to')
+          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties, {"x-retry-count"=>0}).and_return('correlation_id')
+          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties, {"x-retry-count"=>0}).and_return('reply_to')
           expect(retry_queue_double).to receive(:publish).with(response_body, {:expiration=>11000, :headers=>{:"x-retry-count"=>1, :reply_to=>"reply_to", correlation_id: 'correlation_id'}})
 
           expect(channel_double).to receive(:acknowledge).with('delivery_tag', false)
@@ -127,8 +127,8 @@ describe RogerRabbit::Consumer do
         let(:delivery_headers) { {"x-retry-count" => 3} }
 
         it 'should send the message to the dead queue' do
-          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties).and_return('correlation_id')
-          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties).and_return('reply_to')
+          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties, {"x-retry-count"=>3}).and_return('correlation_id')
+          expect_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties, {"x-retry-count"=>3}).and_return('reply_to')
           expect(dead_queue_double).to receive(:publish).with(response_body, {:correlation_id=>"correlation_id"})
 
           expect(channel_double).to receive(:acknowledge).with('delivery_tag', false)
@@ -148,7 +148,7 @@ describe RogerRabbit::Consumer do
         expect(delivery_properties).to receive(:[]).with(:correlation_id).and_return('correlation_id')
         instance = RogerRabbit::Consumer.get_instance_for_queue(queue_name)
 
-        expect(instance.send(:extract_correlation_id, delivery_properties)).to eq('correlation_id')
+        expect(instance.send(:extract_correlation_id, delivery_properties, {})).to eq('correlation_id')
       end
     end
 
@@ -158,7 +158,7 @@ describe RogerRabbit::Consumer do
         expect(delivery_properties).to receive(:[]).with(:correlation_id).and_return(nil)
         instance = RogerRabbit::Consumer.get_instance_for_queue(queue_name)
 
-        expect(instance.send(:extract_correlation_id, delivery_properties)).to eq('correlation_id')
+        expect(instance.send(:extract_correlation_id, delivery_properties, {'correlation_id' => 'correlation_id'})).to eq('correlation_id')
       end
     end
   end
@@ -172,7 +172,7 @@ describe RogerRabbit::Consumer do
         expect(delivery_properties).to receive(:[]).with(:reply_to).and_return('reply_to')
         instance = RogerRabbit::Consumer.get_instance_for_queue(queue_name)
 
-        expect(instance.send(:extract_reply_to, delivery_properties)).to eq('reply_to')
+        expect(instance.send(:extract_reply_to, delivery_properties, {})).to eq('reply_to')
       end
     end
 
@@ -182,7 +182,7 @@ describe RogerRabbit::Consumer do
         expect(delivery_properties).to receive(:[]).with(:reply_to).and_return(nil)
         instance = RogerRabbit::Consumer.get_instance_for_queue(queue_name)
 
-        expect(instance.send(:extract_reply_to, delivery_properties)).to eq('reply_to')
+        expect(instance.send(:extract_reply_to, delivery_properties, {'reply_to' => 'reply_to'})).to eq('reply_to')
       end
     end
   end
