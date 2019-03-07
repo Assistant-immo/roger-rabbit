@@ -182,7 +182,7 @@ module RogerRabbit
 
       def set_queue(queue_params)
         queue_name = queue_params.delete(:name)
-        routing_key = queue_params.delete(:routing_key) || queue_name
+        routing_key = queue_params.delete(:routing_key)
         exchange = queue_params.delete(:exchange)
         retriable = queue_params.delete(:retriable)
 
@@ -223,6 +223,9 @@ module RogerRabbit
 
       def self.get_queue_config(queue_name)
         queue_config = RogerRabbit.configuration.queues[queue_name]
+
+        # Set default routing_key to queue_name
+        queue_config[:routing_key] ||= queue_name
 
         if queue_config == nil || queue_config == {}
           raise RogerRabbit::Configuration::ConfigurationError.new("No configuration for queue <#{queue_name}>")
