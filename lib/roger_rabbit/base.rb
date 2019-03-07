@@ -182,7 +182,7 @@ module RogerRabbit
 
       def set_queue(queue_params)
         queue_name = queue_params.delete(:name)
-        routing_key = queue_params.delete(:routing_key)
+        routing_key = queue_params.delete(:routing_key) || queue_name
         exchange = queue_params.delete(:exchange)
         retriable = queue_params.delete(:retriable)
 
