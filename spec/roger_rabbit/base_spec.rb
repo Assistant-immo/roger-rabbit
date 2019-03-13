@@ -730,7 +730,7 @@ describe RogerRabbit::Base do
       end
 
       it 'should return the exchange name' do
-        expect(subject).to eq({config: 1})
+        expect(subject).to eq({config: 1, :routing_key=>queue_name})
       end
     end
   end

@@ -87,11 +87,11 @@ describe RogerRabbit::Consumer do
       allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_reply_to).with(delivery_properties, {})
       allow(channel_double).to receive(:acknowledge).with('delivery_tag', false)
 
-      expect{ |probe| RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&probe) }.to yield_with_args(response_body, delivery_properties, {:correlation_id=>nil, :reply_to=>nil}, false)
+      expect{ |probe| RogerRabbit::Consumer.get_instance_for_queue(queue_name).consume(&probe) }.to yield_with_args(response_body, delivery_properties, {:correlation_id=>nil, :reply_to=>nil}, false, 0)
     end
 
     context 'passed block evaluate to true' do
-      let(:block) { -> (body, properties, rpc_properties, last_retry) { true } }
+      let(:block) { -> (body, properties, rpc_properties, last_retry, retry_count) { true } }
 
       it 'should not try to publish in the retry or the dead queue and acknowledge the message' do
         allow_any_instance_of(RogerRabbit::Consumer).to receive(:extract_correlation_id).with(delivery_properties, {})
@@ -107,7 +107,7 @@ describe RogerRabbit::Consumer do
     end
 
     context 'passed block evaluate to false' do
-      let(:block) { -> (body, properties, rpc_properties, last_retry) { false } }
+      let(:block) { -> (body, properties, rpc_properties, last_retry, retry_count) { false } }
 
       context 'Will retry' do
         let(:delivery_headers) { {"x-retry-count" => 0} }

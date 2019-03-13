@@ -19,8 +19,7 @@ module RogerRabbit
           correlation_id = extract_correlation_id(_properties, headers)
           reply_to = extract_reply_to(_properties, headers)
 
-
-          success = block.call(body, _properties, {correlation_id: correlation_id, reply_to: reply_to}, retry_count == max_retry_count)
+          success = block.call(body, _properties, {correlation_id: correlation_id, reply_to: reply_to}, retry_count == max_retry_count, retry_count)
 
           unless success
             # Taken from https://felipeelias.github.io/rabbitmq/2016/02/22/rabbitmq-exponential-backoff.html
